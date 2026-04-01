@@ -155,9 +155,3 @@ id                                   | sensor_id   | temperatura | status_logico
 6ba7b810-9dad-11d1-80b4-00c04fd430c8 | SENSOR-1234 | 8.3         | Normal        | 2024-03-31 14:29:55
 ```
 
----
-
-
-- [ ] Containerização com Docker
-- [ ] Orquestração com Kubernetes
-- [ ] Monitoramento com Prometheus + Grafana
