@@ -109,7 +109,7 @@ python client.py
 
 #### **Passo 3**: Configurar URL do servidor na interface
 1. No campo **"URL do Servidor"**, alterar para: `http://192.168.1.100:5000`
-2. Clicar em **"🔌 Testar Conexão"** para validar
+2. Clicar em **"Testar Conexão"** para validar
 
 ---
 
@@ -131,105 +131,7 @@ python client.py
 - Tabela mostra últimas 50 leituras
 - Marca duplicadas com `(DUP)`
 
----
-
-## Endpoints da API
-
-### `POST /sensor/reading`
-Recebe leitura de sensor.
-
-**Request**:
-```json
-{
-  "uuid": "550e8400-e29b-41d4-a716-446655440000",
-  "sensor_id": "SENSOR-1234",
-  "temperatura": 22.5
-}
-```
-
-**Response (201 Created)**:
-```json
-{
-  "message": "Leitura processada com sucesso",
-  "uuid": "550e8400-e29b-41d4-a716-446655440000",
-  "sensor_id": "SENSOR-1234",
-  "temperatura": 22.5,
-  "status": "Crítico",
-  "timestamp": "2024-03-31T14:30:00.123456",
-  "idempotent": false
-}
-```
-
-**Response (200 OK - UUID duplicado)**:
-```json
-{
-  "message": "Leitura já processada (requisição duplicada)",
-  "uuid": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "Crítico",
-  "idempotent": true
-}
-```
-
----
-
-### `GET /sensor/history?limit=10&offset=0`
-Consulta histórico de leituras.
-
-**Response**:
-```json
-{
-  "leituras": [
-    {
-      "id": "550e8400-...",
-      "sensor_id": "SENSOR-1234",
-      "temperatura": 22.5,
-      "status_logico": "Crítico",
-      "timestamp": "2024-03-31T14:30:00.123456"
-    }
-  ],
-  "total": 150,
-  "limit": 10,
-  "offset": 0
-}
-```
-
----
-
-### `GET /sensor/stats`
-Estatísticas agregadas.
-
-**Response**:
-```json
-{
-  "total_leituras": 150,
-  "distribuicao_status": {
-    "Normal": 90,
-    "Alerta": 45,
-    "Crítico": 15
-  },
-  "temperatura": {
-    "minima": -8.5,
-    "maxima": 38.2,
-    "media": 12.7
-  }
-}
-```
-
----
-
-### `GET /health`
-Health check.
-
-**Response**:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-03-31T14:30:00.123456",
-  "version": "1.0.0"
-}
-```
-
----
+------
 
 ## Schema do Banco de Dados
 
