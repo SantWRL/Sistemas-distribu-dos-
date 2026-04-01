@@ -1,41 +1,20 @@
-# 🌡️ Sistema Distribuído de Monitoramento de Sensores de Temperatura
+# Sistema Distribuído de Monitoramento de Sensores de Temperatura
 
-## 📋 Descrição do Projeto
+## Descrição do Projeto
 
 Sistema cliente/servidor em **três camadas** para monitoramento distribuído de sensores de temperatura, implementando conceitos avançados de **sistemas distribuídos** como:
 
-- ✅ **Idempotência** via UUID (tolerância a falhas de rede)
-- ✅ **Retry com Exponential Backoff** (resiliência)
-- ✅ **Transparência de Distribuição** (cliente não sabe como dados são armazenados)
-- ✅ **Processamento Centralizado** (servidor como fonte única de verdade)
-- ✅ **Comunicação Stateless** (escalabilidade horizontal)
+- **Idempotência** via UUID (tolerância a falhas de rede)
+- **Retry com Exponential Backoff** (resiliência)
+- **Transparência de Distribuição** (cliente não sabe como dados são armazenados)
+- **Processamento Centralizado** (servidor como fonte única de verdade)
+- **Comunicação Stateless** (escalabilidade horizontal)
 
 ---
 
-## 🏗️ Arquitetura
+##  Arquitetura
 
-```
-┌─────────────────┐          HTTP/JSON           ┌─────────────────┐
-│                 │  ─────────────────────────>   │                 │
-│  CLIENTE        │                               │    SERVIDOR     │
-│  (Tkinter)      │  <─────────────────────────   │    (Flask)      │
-│                 │       Resposta Status         │                 │
-└─────────────────┘                               └────────┬────────┘
-                                                           │
-     Gera UUID único                                       │ SQL
-     Simula temperatura                                    │ Transações
-     Retry automático                                      ▼
-     Interface gráfica                           ┌─────────────────┐
-                                                 │   BANCO DADOS   │
-                                                 │    (SQLite)     │
-                                                 └─────────────────┘
-                                                   
-                                                   Persistência ACID
-                                                   UUID = PK (idempotência)
-                                                   Índices otimizados
-```
-
-### 🔹 **Camada 1 - Cliente (Simulador de Sensor)**
+###  **Camada 1 - Cliente (Simulador de Sensor)**
 - Interface gráfica em **Tkinter**
 - Gera dados simulados de temperatura (-10°C a 40°C)
 - Gera **UUID v4** para cada leitura (garantia de idempotência)
@@ -44,17 +23,17 @@ Sistema cliente/servidor em **três camadas** para monitoramento distribuído de
 - Exibe status retornado pelo servidor em tempo real
 - Mantém histórico local das últimas 50 leituras
 
-### 🔹 **Camada 2 - Servidor (Processamento de Lógica)**
+###  **Camada 2 - Servidor (Processamento de Lógica)**
 - API REST em **Flask**
 - **Valida requisições** (estrutura JSON, tipos, ranges)
 - **Verificação de idempotência**: consulta UUID no banco antes de processar
 - **Regras de negócio centralizadas**:
-  - `Temperatura ≤ 10°C` → **Normal** 🟢
-  - `10°C < Temperatura ≤ 15°C` → **Alerta** 🟡
-  - `Temperatura > 15°C` → **Crítico** 🔴
+  - `Temperatura ≤ 10°C` → **Normal** 
+  - `10°C < Temperatura ≤ 15°C` → **Alerta** 
+  - `Temperatura > 15°C` → **Crítico** 
 - **Transações atômicas** no banco de dados
 
-### 🔹 **Camada 3 - Banco de Dados (Persistência)**
+###  **Camada 3 - Banco de Dados (Persistência)**
 - **SQLite** com schema otimizado
 - UUID como **chave primária** (previne duplicação)
 - Índice em `timestamp` para queries rápidas
@@ -62,121 +41,17 @@ Sistema cliente/servidor em **três camadas** para monitoramento distribuído de
 
 ---
 
-## 🧠 Raciocínio Lógico - Sistemas Distribuídos
 
-### 1️⃣ **Idempotência (Problema de Rede Não Confiável)**
-**Cenário**: Cliente envia requisição → Servidor processa → Rede falha antes de responder
 
-**Sem UUID**:
-```
-Cliente envia temp=25°C → Timeout → Cliente reenvia temp=25°C
-Servidor insere registro 1: temp=25°C
-Servidor insere registro 2: temp=25°C  ❌ DUPLICADO!
-```
+## Instruções de Execução
 
-**Com UUID**:
-```
-Cliente envia {uuid: abc123, temp: 25°C} → Timeout → Cliente reenvia {uuid: abc123, temp: 25°C}
-Servidor insere registro 1: uuid=abc123, temp=25°C
-Servidor detecta uuid=abc123 já existe → Retorna sucesso sem inserir ✅
-```
-
-**Código relevante** (servidor):
-```python
-# Verificação de idempotência
-cursor.execute('SELECT id FROM leituras WHERE id = ?', (req_uuid,))
-existing = cursor.fetchone()
-
-if existing:
-    # UUID já processado - retornar sucesso (operação idempotente)
-    return jsonify({'message': 'Leitura já processada', 'idempotent': True}), 200
-```
-
----
-
-### 2️⃣ **Retry com Exponential Backoff**
-**Por quê?** Evitar sobrecarga do servidor em caso de instabilidade transitória.
-
-**Progressão**:
-- Tentativa 1: delay = 0s (imediato)
-- Tentativa 2: delay = 1s
-- Tentativa 3: delay = 2s
-- Tentativa 4: delay = 4s
-- Tentativa 5: delay = 8s
-
-**Código relevante** (cliente):
-```python
-for attempt in range(1, max_retries + 1):
-    try:
-        response = requests.post(url, json=payload, timeout=5)
-        if response.status_code == 200:
-            return  # Sucesso!
-    except ConnectionError:
-        if attempt < max_retries:
-            delay = 2 ** (attempt - 1)  # Exponencial
-            time.sleep(delay)
-```
-
----
-
-### 3️⃣ **Transparência de Distribuição**
-**Princípio**: Cliente não deve saber detalhes de implementação do servidor.
-
-✅ Cliente só sabe:
-- Endpoint: `POST /sensor/reading`
-- Formato: JSON com `{uuid, sensor_id, temperatura}`
-- Resposta: `{status, timestamp}`
-
-❌ Cliente NÃO sabe:
-- Que existe banco SQLite
-- Como status é calculado (≤10°C = Normal)
-- Que há verificação de UUID duplicado
-
-**Benefício**: Servidor pode mudar BD (SQLite → PostgreSQL) sem alterar cliente!
-
----
-
-### 4️⃣ **Fonte Única de Verdade (Single Source of Truth)**
-**Por quê?** Evitar inconsistências entre cliente e servidor.
-
-❌ **Ruim**: Cliente calcula status localmente
-```python
-# CLIENTE
-if temp <= 10:
-    status = 'Normal'  # E se servidor usar > 10?
-```
-
-✅ **Bom**: Servidor calcula e retorna status
-```python
-# SERVIDOR (fonte única de verdade)
-status = calcular_status(temperatura)
-return jsonify({'status': status})
-
-# CLIENTE (confia na resposta)
-status = response.json()['status']
-```
-
----
-
-### 5️⃣ **Stateless Design (Escalabilidade)**
-Cada requisição é **independente** (não há sessão).
-
-**Benefícios**:
-- ✅ Pode ter múltiplas instâncias do servidor (load balancer)
-- ✅ Se servidor cair, cliente continua enviando para outro
-- ✅ Não há "perda de estado" (tudo está no BD)
-
----
-
-## 🚀 Instruções de Execução
-
-### 📦 **Pré-requisitos**
+### *Pré-requisitos**
 - Python 3.8 ou superior
 - Dois computadores na mesma rede (ou usar `localhost` para testes)
 
 ---
 
-### 🖥️ **1. Configurar o Servidor**
+### **1. Configurar o Servidor**
 
 #### **Passo 1**: Instalar dependências
 ```bash
@@ -196,8 +71,8 @@ SERVIDOR DE MONITORAMENTO DE SENSORES - INICIALIZANDO
 ============================================================
 ✓ Banco de dados inicializado: /caminho/sensor_data.db
 
-🚀 Servidor Flask rodando em http://0.0.0.0:5000
-📊 Endpoints disponíveis:
+Servidor Flask rodando em http://0.0.0.0:5000
+Endpoints disponíveis:
    POST   /sensor/reading  - Receber leitura de sensor
    GET    /sensor/history  - Consultar histórico
    GET    /sensor/stats    - Estatísticas gerais
@@ -219,7 +94,7 @@ ipconfig
 
 ---
 
-### 💻 **2. Configurar o Cliente**
+### **2. Configurar o Cliente**
 
 #### **Passo 1**: Instalar dependências
 ```bash
@@ -238,18 +113,18 @@ python client.py
 
 ---
 
-### 🎮 **3. Usar o Sistema**
+### **3. Usar o Sistema**
 
 #### **Enviar leitura manual**:
 1. Ajustar temperatura usando o slider
-2. Clicar em **"📤 Enviar Leitura"**
+2. Clicar em **"Enviar Leitura"**
 3. Observar status retornado (Normal/Alerta/Crítico)
 
 #### **Gerar temperatura aleatória**:
-- Clicar em **"🎯 Temperatura Aleatória"**
+- Clicar em **"Temperatura Aleatória"**
 
 #### **Envio automático**:
-- Marcar **"🔄 Envio Automático (5s)"**
+- Marcar **"Envio Automático (5s)"**
 - Sistema envia leitura a cada 5 segundos
 
 #### **Ver histórico**:
@@ -258,7 +133,7 @@ python client.py
 
 ---
 
-## 📊 Endpoints da API
+## Endpoints da API
 
 ### `POST /sensor/reading`
 Recebe leitura de sensor.
@@ -356,7 +231,7 @@ Health check.
 
 ---
 
-## 🗄️ Schema do Banco de Dados
+## Schema do Banco de Dados
 
 ```sql
 CREATE TABLE leituras (
@@ -380,140 +255,7 @@ id                                   | sensor_id   | temperatura | status_logico
 
 ---
 
-## 🧪 Testes de Idempotência
 
-### **Teste 1: Envio duplicado intencional**
-
-1. Cliente envia leitura com UUID `abc-123`
-2. Cliente envia **novamente** com UUID `abc-123`
-3. **Resultado esperado**: Servidor retorna `idempotent: true`, sem inserir duplicata
-
-### **Teste 2: Simulação de timeout**
-
-1. Cliente envia leitura
-2. **Desconectar rede** após servidor processar mas antes de responder
-3. Cliente executa retry automático
-4. **Resultado esperado**: Servidor detecta UUID já processado, retorna sucesso
-
----
-
-## 📸 Demonstração Visual
-
-### **Interface do Cliente**
-```
-┌──────────────────────────────────────────────────────┐
-│  🌡️ Simulador de Sensor de Temperatura              │
-├──────────────────────────────────────────────────────┤
-│  ⚙️ Configuração                                     │
-│  URL do Servidor: http://192.168.1.100:5000          │
-│  ID do Sensor: SENSOR-3847       [🔌 Testar Conexão] │
-├──────────────────────────────────────────────────────┤
-│  🎲 Simulação de Temperatura                         │
-│  Temperatura: [========|====] 22.5°C                 │
-│  [🎯 Aleatória] [📤 Enviar] [🔄 Auto (5s)]           │
-├──────────────────────────────────────────────────────┤
-│  📊 Status Atual                                     │
-│   ⬤  Status: Crítico                                 │
-│  🔴  UUID: 550e8400-e29b-...                         │
-│      Timestamp: 2024-03-31 14:30:00                  │
-├──────────────────────────────────────────────────────┤
-│  📜 Histórico de Leituras                            │
-│  ┌────────────┬──────┬──────────┬─────────────────┐ │
-│  │ Data/Hora  │ Temp │ Status   │ UUID            │ │
-│  ├────────────┼──────┼──────────┼─────────────────┤ │
-│  │ 14:30:00   │ 22.5 │ Crítico  │ 550e8400...     │ │
-│  │ 14:29:55   │ 8.3  │ Normal   │ 6ba7b810...     │ │
-│  └────────────┴──────┴──────────┴─────────────────┘ │
-│                          [🗑️ Limpar Histórico]      │
-└──────────────────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ Tecnologias Utilizadas
-
-| Componente | Tecnologia | Justificativa |
-|------------|------------|---------------|
-| **Cliente** | Tkinter | Interface gráfica nativa Python, multiplataforma |
-| **Servidor** | Flask | Framework leve, ideal para APIs REST |
-| **Comunicação** | HTTP/JSON | Protocolo stateless, interoperável |
-| **Banco de Dados** | SQLite | Embedded, transacional (ACID), sem setup |
-| **UUID** | uuid4 | 128-bit único, collision-proof |
-
----
-
-## 📚 Conceitos de Sistemas Distribuídos Aplicados
-
-✅ **Idempotência** - Operações podem ser repetidas sem efeitos colaterais  
-✅ **Retry Logic** - Resiliência a falhas transitórias de rede  
-✅ **Exponential Backoff** - Evita sobrecarga do servidor  
-✅ **Stateless Communication** - Escalabilidade horizontal  
-✅ **Single Source of Truth** - Consistência de dados  
-✅ **Transparência de Distribuição** - Cliente não conhece implementação  
-✅ **Transações Atômicas** - ACID no banco de dados  
-✅ **Validação de Entrada** - Prevenção de SQL injection e dados malformados  
-
----
-
-## 🎯 Funcionalidades Implementadas
-
-- [x] Cliente gera UUID único por leitura
-- [x] Servidor valida UUID antes de inserir (idempotência)
-- [x] Regras de negócio centralizadas (Normal/Alerta/Crítico)
-- [x] Retry automático com exponential backoff
-- [x] Interface gráfica responsiva (threading)
-- [x] Histórico local no cliente (últimas 50 leituras)
-- [x] API REST com 4 endpoints
-- [x] Health check endpoint
-- [x] Validação rigorosa de dados
-- [x] Transações atômicas no BD
-- [x] Índices otimizados para queries
-- [x] Tratamento de erros com códigos HTTP apropriados
-
----
-
-## 📹 Vídeo Demonstrativo
-
-*[Incluir link do vídeo mostrando cliente e servidor em execução]*
-
----
-
-## 👨‍💻 Autor
-
-Sistema desenvolvido como projeto de **Sistemas Distribuídos**, demonstrando conceitos avançados de arquitetura cliente/servidor, idempotência, e comunicação resiliente.
-
----
-
-## 📄 Licença
-
-MIT License - Livre para uso educacional e comercial.
-
----
-
-## 🐛 Troubleshooting
-
-### Problema: "Erro de conexão"
-**Solução**: 
-1. Verificar se servidor está rodando (`python server.py`)
-2. Verificar firewall (liberar porta 5000)
-3. Testar com `curl http://IP_SERVIDOR:5000/health`
-
-### Problema: "UUID duplicado"
-**Solução**: Isso é **normal** em caso de retry! O sistema está funcionando corretamente (idempotência).
-
-### Problema: Cliente congela ao enviar
-**Solução**: Verificar se está usando `_enviar_leitura_thread()` (executa em thread separada).
-
----
-
-## 🚀 Melhorias Futuras
-
-- [ ] Autenticação JWT entre cliente e servidor
-- [ ] Migrar de SQLite para PostgreSQL (produção)
-- [ ] Implementar WebSocket para push de alertas
-- [ ] Dashboard web com gráficos em tempo real
-- [ ] Rate limiting no servidor (prevenir DDoS)
-- [ ] Criptografia TLS/SSL (HTTPS)
 - [ ] Containerização com Docker
 - [ ] Orquestração com Kubernetes
 - [ ] Monitoramento com Prometheus + Grafana
