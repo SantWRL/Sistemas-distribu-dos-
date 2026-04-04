@@ -61,8 +61,8 @@ class SensorSimulator:
         self.master.geometry("800x700")
         self.master.resizable(True, True)
         
-        # Configuração do servidor (IMPORTANTE: Alterar para IP do servidor)
-        self.server_url = "http://localhost:5000"  # Mudar para IP do servidor real
+        # Configuração do servidor 
+        self.server_url = "http://localhost:5000" 
         self.sensor_id = f"SENSOR-{random.randint(1000, 9999)}"
         
         # Histórico local (máximo 50 leituras)
@@ -266,6 +266,8 @@ class SensorSimulator:
             temp = random.uniform(15, 40)
         
         self.temp_var.set(round(temp, 1))
+
+        self._atualizar_label_temp(round(temp, 1))
     
     def _desenhar_indicador(self, cor: str):
         """
@@ -379,7 +381,6 @@ class SensorSimulator:
                 )
                 
                 if response.status_code in [200, 201]:
-                    # Sucesso!
                     data = response.json()
                     status = data.get('status', 'Desconhecido')
                     is_duplicate = data.get('idempotent', False)
@@ -390,7 +391,7 @@ class SensorSimulator:
                         timestamp, temperatura, status, reading_uuid, is_duplicate
                     )
                     
-                    # Atualizar UI - sucesso
+                    # Atualizar UI
                     cor = self.status_colors.get(status, 'gray')
                     self.master.after(0, lambda: self._atualizar_status_ui(
                         status, reading_uuid, timestamp, cor, is_duplicate
@@ -399,7 +400,6 @@ class SensorSimulator:
                     return  # Sucesso - sair do loop de retry
                 
                 elif response.status_code == 409:
-                    # UUID duplicado (já foi processado)
                     data = response.json()
                     status = data.get('status', 'Desconhecido')
                     
